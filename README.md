@@ -8,7 +8,7 @@ Nuclear magnetic resonance (NMR) spectroscopy reveals local chemical environment
 
 ## Data and checkpoints
 
-Please download and put datasets, checkpoints under `data/`.
+Please download and put datasets, checkpoints under `data/`.[NMR-Frag on Hugging Face](https://huggingface.co/CROWD-lpy/NMR-Frag)
 
 | Local path | Contents | Needed for |
 | --- | --- | --- |
