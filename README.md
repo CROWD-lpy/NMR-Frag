@@ -1,4 +1,4 @@
-# NMR-Frag
+# NMR-Frag (Fragment Selection and Assembly with Spectrum-Guided Candidate Ranking for NMR Structure Elucidation)
 
 ![NMR-Frag selects and assembles fragments from NMR spectra.](./images/TOC.png)
 
