@@ -1,6 +1,6 @@
 # NMR-Frag
 
-Molecular structure elucidation from one-dimensional NMR spectra by fragment selection and assembly. NMR-Frag selects a multiset of fragments, connects their attachment points and ranks the resulting 2D structures against the input spectrum.
+Nuclear magnetic resonance (NMR) spectroscopy reveals local chemical environments that chemists use to identify molecular fragments and infer their connectivity, yet existing models rarely mirror this stepwise chemical reasoning. NMR-Frag was developed to model this process in three stages: constructing an unordered fragment multiset from a library of 3110 structural units, assembling the selected fragments into chemically valid candidate structures by predicting bonds between their attachment ports, and ranking candidates directly based on the input spectra without requiring an auxiliary spectral prediction model. Pretraining on PubChem enables NMR-Frag to capture fragment composition and assembly rules prior to finetuning on experimental spectra from NMRexp. Individual spectra, the molecular formula, or proton peak annotations were randomly omitted during training to broaden its applicability. Evaluation of the full model on NMRexp yielded a hit@1 of 76.47% and a hit@10 of 90.80%. Case studies demonstrate that fragment selection is supported by peaks at the expected chemical shifts even without explicit peak assignments. Overall, NMR-Frag elucidates molecular structures from NMR spectra with high accuracy while guiding chemists by highlighting selected substructures and the contributions of individual peaks.
 
 ![NMR-Frag selects and assembles fragments from NMR spectra.](./images/TOC.png)
 
@@ -8,7 +8,7 @@ Molecular structure elucidation from one-dimensional NMR spectra by fragment sel
 
 ## Data and checkpoints
 
-Run all commands from the repository root. The GitHub layout contains `src/`, `data/`, `images/` and this README. Put datasets, checkpoints and run outputs under `data/`.
+Please download and put datasets, checkpoints under `data/`.
 
 | Local path | Contents | Needed for |
 | --- | --- | --- |
@@ -20,30 +20,27 @@ Run all commands from the repository root. The GitHub layout contains `src/`, `d
 | `data/raw/NMRexp/` | One NMRexp release or one set of split files, in Parquet, LMDB, JSONL or CSV format | Building from raw spectra. [NMRexp dataset](https://zenodo.org/records/17296666) |
 | `data/raw/PubChem/CID-SMILES.gz` | Two columns, PubChem CID and SMILES, separated by whitespace | Building from raw structures. [PubChem CID–SMILES](https://ftp.ncbi.nlm.nih.gov/pubchem/Compound/Extras/CID-SMILES.gz) |
 
-For an existing run, use its processed dataset, or rebuild examples with its original `tokenizer.json`, heavy-atom limit and split assignments. The loader checks the vocabulary SHA-256, the catalog identity, the heavy-atom limit and every model parameter. Checkpoints from `src_v6_cosine` use format `v6-cosine-ce-1`. A vocabulary rebuilt independently can have the same size and different fragment IDs.
-
 ### Installation
 
-Use a Python 3.11 or 3.12 environment. The dependency versions used in CPU compatibility checks are pinned in `src/requirements.txt`. For GPU runs, install the PyTorch 2.6.0 build for your CUDA environment, then install the remaining requirements.
-
 ```bash
-python -m pip install -r src/requirements.txt
+conda env create -n NMRFrag_py311 -f environment.yml
+conda activate NMRFrag_py311
 ```
 
 ## Checkpoint verification
 
-With an existing NMRexp checkpoint and its processed dataset, generate candidates for one validation record. Set `--data` to the local dataset path when moving a checkpoint to another machine. Either processed layout in the table works for evaluation.
+With an existing NMRexp checkpoint and its processed dataset, generate candidates for one validation record.
 
 ```bash
 python src/05_evaluate.py --stage nmrexp --split valid \
   --checkpoint data/checkpoints/nmrexp/last.pt \
   --data data/processed/overall_3000 --limit 1 \
-  --out data/evaluation/checkpoint_check.jsonl --device cpu --threads 1
+  --out data/evaluation/checkpoint_check.jsonl --device cuda:0 --threads 1
 ```
 
-A completed run writes the checkpoint hash, resolved settings, predictions and metrics. To check a PubChem checkpoint, use `--stage pubchem`, its checkpoint path and a separate output path.
-
 ## Dataset preparation
+
+The following steps cover dataset preprocessing and restructuring. If you have already downloaded the preprocessed data and model weights, please skip this step.
 
 ### 1. Standardize records and assign splits
 
@@ -53,7 +50,7 @@ python src/01_prepare_data.py --nmrexp data/raw/NMRexp \
   --cid-mod 100 --max-heavy 100 --seed 42
 ```
 
-Raw NMRexp nucleus records use `SMILES`, `NMR_type` and `NMR_processed`. Paired records can supply `smiles`, `h_peaks` and `c_peaks`. Point `--nmrexp` directly at one file if the download directory also contains alternate exports. Supply the original benchmark split with `--split-file data/raw/splits.csv` (columns `smiles,split`), or use split labels in the records or filenames. Unassigned molecules receive a seeded 85.5% / 4.5% / 10% train/valid/test split. PubChem pretraining excludes NMRexp validation and test structures. The PubChem example selects CIDs divisible by 100. Recreating a specific benchmark cohort requires its original split assignments and data snapshots.
+PubChem pretraining excludes NMRexp validation and test structures. The PubChem example selects CIDs divisible by 100. Recreating a specific benchmark cohort requires its original split assignments and data snapshots.
 
 ### 2. Build or reuse the fragment vocabulary
 
@@ -72,10 +69,8 @@ When using existing weights, place their original `tokenizer.json` in `data/proc
 ```bash
 python src/03_prepare_data.py --data data/processed/uniform \
   --fragments data/processed/fragments --out data/processed/overall_3000 \
-  --hard-negatives 2
+  --hard-negatives 4
 ```
-
-This writes the fragment labels, attachment-point connections, graph features and up to two local negatives from bond rewiring. It checks that each reference decomposition reconstructs the original 2D structure. Use new output directories for data construction. A complete existing processed dataset can be used directly at the corresponding training or evaluation step.
 
 ## Training
 
@@ -83,13 +78,11 @@ This writes the fragment labels, attachment-point connections, graph features an
 
 ```bash
 python src/04_train.py --stage pubchem --data data/processed/overall_3000 \
-  --run-dir data/runs/pubchem --fragment-repr hybrid --epochs 20 \
+  --run-dir data/runs/pubchem --fragment-repr hybrid --epochs 25 \
   --batch-size 64 --tasks-per-record 2 --lr 2e-4 --seed 42 --device cuda:0
 ```
 
 ### Prepare and merge hard negatives with an existing NMRexp checkpoint
-
-Mine candidates from NMRexp **train** using a trained spectrum-conditioned checkpoint and the original step-03 data. Pass `--limit 0` for all eligible training molecules or a positive limit for a smaller run.
 
 ```bash
 python src/07_prepare_hard_negatives.py --checkpoint data/checkpoints/nmrexp/last.pt \
@@ -102,10 +95,6 @@ python src/08_merge_hard_candidates.py --data data/processed/overall_3000 \
   --out data/processed/overall_3000_hard_candidates
 ```
 
-The miner selects one spectrum per training molecule, preferring paired ¹H/¹³C records. `--cohort available` also uses single-nucleus spectra. `--cohort paired` reproduces paired-only sampling. It retains distinct, formula-matched candidates with different 2D connectivity from the target. Add `--resume` to continue an interrupted mining run or increase its molecule limit. Keep the JSONL beside its generated `.config.json`.
-
-The merge shares a molecule's mined candidates across its training spectra. Validation and test records use only their own step-03 local negatives. The merged dataset records the mining checkpoint hash and per-split coverage in `hard_candidates_report.json`. Existing merged datasets can be used directly for fine-tuning.
-
 <details>
 <summary>Starting with a new vocabulary and no compatible NMRexp checkpoint</summary>
 
@@ -114,7 +103,7 @@ After PubChem pretraining, fit a seed NMRexp model using the local negatives fro
 ```bash
 python src/04_train.py --stage nmrexp --bootstrap --data data/processed/overall_3000 \
   --init-from data/runs/pubchem/last.pt --run-dir data/runs/nmrexp_seed \
-  --epochs 20 --batch-size 64 --tasks-per-record 2 --lr 2e-4 \
+  --epochs 25 --batch-size 64 --tasks-per-record 2 --lr 2e-4 \
   --lr-decay-scale 2 --rank-weight 0.5 --device cuda:0
 ```
 
@@ -126,16 +115,20 @@ python src/04_train.py --stage nmrexp --bootstrap --data data/processed/overall_
 python src/04_train.py --stage nmrexp \
   --data data/processed/overall_3000_hard_candidates \
   --init-from data/runs/pubchem/last.pt --run-dir data/runs/nmrexp \
-  --epochs 20 --batch-size 64 --tasks-per-record 2 --lr 2e-4 --lr-decay-scale 2 \
+  --epochs 30 --batch-size 64 --tasks-per-record 2 --lr 2e-4 --lr-decay-scale 2 \
   --rank-weight 0.5 --hard-negatives 4 --eval-valid 500 \
   --eval-beam 32 --eval-connect-beam 8 --eval-connect-normalization pair-mask \
   --eval-score-mode joint --eval-alpha 0.5 --eval-connect-weight 0.25 \
   --eval-rank-mix 0.9 --eval-pool-size 0 --seed 42 --device cuda:0
 ```
 
-For a supplied PubChem checkpoint, use `--init-from data/checkpoints/pubchem/last.pt`. For NMRexp training from scratch on the same merged data, omit `--init-from`, specify `--fragment-repr hybrid` and choose a new run directory. This run omits graph-teacher alignment. `--rank-weight` weights the training loss. `--eval-rank-mix` weights Rank during generation validation.
+For a supplied PubChem checkpoint, use `--init-from data/checkpoints/pubchem/last.pt`. 
 
-For the earlier epoch-selection rule, keep the example's 500 validation records and widths 32/8, and set `--eval-connect-normalization feasible --eval-score-mode stage --eval-alpha 1 --eval-connect-weight 1 --eval-rank-mix 0.7 --eval-pool-size 128`. Both settings train with the same loss.
+For NMRexp training from scratch on the same merged data, omit `--init-from`, specify `--fragment-repr hybrid` and choose a new run directory. This run omits graph-teacher alignment. 
+
+`--rank-weight` weights the training loss. 
+
+`--eval-rank-mix` weights Rank during generation validation.
 
 ### Resume a training run
 
@@ -143,14 +136,12 @@ For the earlier epoch-selection rule, keep the example's 500 validation records 
 python src/04_train.py --stage nmrexp \
   --data data/processed/overall_3000_hard_candidates \
   --resume data/runs/nmrexp/last.pt --run-dir data/runs/nmrexp \
-  --epochs 25 --device cuda:0
+  --epochs 30 --device cuda:0
 ```
 
-`--epochs` is the total epoch count. Resume restores optimizer state and checks the original NMRexp dataset manifest. `last.pt` records the most recent epoch. With generation validation enabled, `best.pt` is selected by Hit@1, then Hit@10, then validation loss. Per-epoch and per-batch metrics are written to `metrics.csv` and `batch_metrics.csv`.
+`--epochs` is the total epoch count.
 
 ## Evaluation
-
-Run the reference decoding configuration on the complete paired ¹H/¹³C test cohort with a molecular formula and full peak annotations. Use `--split valid` and a separate output file for validation. To evaluate supplied weights, replace the checkpoint path.
 
 ```bash
 python src/05_evaluate.py --stage nmrexp --split test \
@@ -170,8 +161,3 @@ The reference generation score is $(A+0.25C)/\sqrt{n_A+n_C}$, where $A$ and $C$ 
 | Smaller search | `--beam 32 --connect-beam 8` or `--beam 16 --connect-beam 4` |
 | Generation score alone | `--rank-mix 0` |
 | Given the reference fragment multiset | `--diagnostic oracle-bag` |
-| Original standalone decoder settings | `--beam 32 --connect-beam 8 --connect-normalization feasible --score-mode stage --alpha 1 --connect-weight 1 --rank-mix 0.7 --pool-size 128` |
-
-Training accepts the same spectrum and decoding options with an `--eval-` prefix, e.g. `--eval-mode h` and `--eval-rank-mix 0`. These affect per-epoch free generation and checkpoint selection. New runs default to widths 16/4 for per-epoch generation and 64/16 for standalone evaluation. A resumed training run inherits its saved decoding settings.
-
-Predictions are written to JSONL, aggregate metrics to `.summary.json`, resolved settings to `.config.json` and cumulative metrics to `.progress.log`. Add `--resume` to continue the same evaluation. Hit@1/3/5/10 use exact canonical 2D connectivity. Tani@1/3/5/10 average each target's best ECFP4-2048 Tanimoto similarity among its top *k* distinct candidates, with zero for an empty pool. The original JSON field names are `tomi1`, `tomi3`, `tomi5` and `tomi10`. `oracle_pool` reports target inclusion anywhere in the retained candidate set.
