@@ -1,14 +1,14 @@
 # NMR-Frag
 
-Nuclear magnetic resonance (NMR) spectroscopy reveals local chemical environments that chemists use to identify molecular fragments and infer their connectivity, yet existing models rarely mirror this stepwise chemical reasoning. NMR-Frag was developed to model this process in three stages: constructing an unordered fragment multiset from a library of 3110 structural units, assembling the selected fragments into chemically valid candidate structures by predicting bonds between their attachment ports, and ranking candidates directly based on the input spectra without requiring an auxiliary spectral prediction model. Pretraining on PubChem enables NMR-Frag to capture fragment composition and assembly rules prior to finetuning on experimental spectra from NMRexp. Individual spectra, the molecular formula, or proton peak annotations were randomly omitted during training to broaden its applicability. Evaluation of the full model on NMRexp yielded a hit@1 of 76.47% and a hit@10 of 90.80%. Case studies demonstrate that fragment selection is supported by peaks at the expected chemical shifts even without explicit peak assignments. Overall, NMR-Frag elucidates molecular structures from NMR spectra with high accuracy while guiding chemists by highlighting selected substructures and the contributions of individual peaks.
-
 ![NMR-Frag selects and assembles fragments from NMR spectra.](./images/TOC.png)
+
+Nuclear magnetic resonance (NMR) spectroscopy reveals local chemical environments that chemists use to identify molecular fragments and infer their connectivity, yet existing models rarely mirror this stepwise chemical reasoning. NMR-Frag was developed to model this process in three stages: constructing an unordered fragment multiset from a library of 3110 structural units, assembling the selected fragments into chemically valid candidate structures by predicting bonds between their attachment ports, and ranking candidates directly based on the input spectra without requiring an auxiliary spectral prediction model. Pretraining on PubChem enables NMR-Frag to capture fragment composition and assembly rules prior to finetuning on experimental spectra from NMRexp. Individual spectra, the molecular formula, or proton peak annotations were randomly omitted during training to broaden its applicability. Evaluation of the full model on NMRexp yielded a hit@1 of 76.47% and a hit@10 of 90.80%. Case studies demonstrate that fragment selection is supported by peaks at the expected chemical shifts even without explicit peak assignments. Overall, NMR-Frag elucidates molecular structures from NMR spectra with high accuracy while guiding chemists by highlighting selected substructures and the contributions of individual peaks.
 
 [Data and checkpoints](#data-and-checkpoints) · [Checkpoint verification](#checkpoint-verification) · [Dataset preparation](#dataset-preparation) · [Training](#training) · [Evaluation](#evaluation)
 
 ## Data and checkpoints
 
-Please download and put datasets, checkpoints under `data/`.[NMR-Frag on Hugging Face](https://huggingface.co/CROWD-lpy/NMR-Frag)
+Please download and put datasets, checkpoints under `data/`.  [NMR-Frag on Hugging Face](https://huggingface.co/CROWD-lpy/NMR-Frag)
 
 | Local path | Contents | Needed for |
 | --- | --- | --- |
